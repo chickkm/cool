@@ -176,13 +176,19 @@
   .stat-val { font-size: 19px; font-weight: 700; font-family: 'SF Mono', monospace; }
   .stat-note { font-size: 10.5px; color: var(--text3); margin-top: 4px; font-family: -apple-system, sans-serif; }
 
-  /* HEATMAP */
-  .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
-  .heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); gap: 3px; width: max-content; }
-  .heatmap-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--bg3); border: 1px solid var(--border); cursor: default; }
-  .heatmap-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: var(--text3); }
-  .heatmap-legend .heatmap-cell { width: 11px; height: 11px; }
-  .heatmap-months { display: flex; gap: 3px; width: max-content; font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+  /* LEADERBOARD */
+  .lb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .lb-col-title { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+  .lb-row { display: grid; grid-template-columns: 18px auto 1fr auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-rank { color: var(--text3); font-size: 11px; font-family: 'SF Mono', monospace; }
+  .lb-sym { color: var(--text); font-family: 'SF Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-right { display: flex; flex-direction: column; align-items: flex-end; }
+  .lb-val { font-family: 'SF Mono', monospace; font-weight: 600; font-size: 13px; }
+  .lb-count { color: var(--text3); font-size: 10px; white-space: nowrap; }
+  @media (max-width: 600px) {
+    .lb-cols { grid-template-columns: 1fr; gap: 22px; }
+  }
 
   .empty-state { text-align: center; padding: 36px; color: var(--text3); font-size: 14px; }
 
@@ -337,20 +343,17 @@
     </div>
 
     <div class="card">
-      <div class="card-title">週損益熱力圖</div>
-      <div class="card-sub">最近 52 週，每一格代表一週的累計損益（台幣），顏色越深代表金額越大 · 紅色獲利 / 綠色虧損</div>
-      <div class="heatmap-wrap">
-        <div id="heatmap-months" class="heatmap-months"></div>
-        <div class="heatmap-grid" id="heatmap-grid"></div>
-      </div>
-      <div class="heatmap-legend">
-        <span>虧損</span>
-        <div class="heatmap-cell" style="background:rgba(38,166,154,0.85);"></div>
-        <div class="heatmap-cell" style="background:rgba(38,166,154,0.4);"></div>
-        <div class="heatmap-cell" style="background:var(--bg3);"></div>
-        <div class="heatmap-cell" style="background:rgba(229,57,53,0.4);"></div>
-        <div class="heatmap-cell" style="background:rgba(229,57,53,0.85);"></div>
-        <span>獲利</span>
+      <div class="card-title">個股損益排行榜</div>
+      <div class="card-sub">依代號加總損益（美股已按匯率換算台幣），依目前上方選的市場篩選</div>
+      <div class="lb-cols">
+        <div class="lb-col">
+          <div class="lb-col-title up">🔺 最賺 Top 10</div>
+          <div id="lb-gainers"></div>
+        </div>
+        <div class="lb-col">
+          <div class="lb-col-title down">🔻 最賠 Top 10</div>
+          <div id="lb-losers"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -750,8 +753,8 @@ function renderStats() {
 
   if (!filtered.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">這個篩選條件下尚無資料</div>';
-    document.getElementById('heatmap-grid').innerHTML = '';
-    document.getElementById('heatmap-months').innerHTML = '';
+    document.getElementById('lb-gainers').innerHTML = '';
+    document.getElementById('lb-losers').innerHTML = '';
     return;
   }
 
@@ -792,67 +795,37 @@ function renderStats() {
     mk('最大連敗', maxLossStreak+' 筆', 'down', '') +
     mk('最大回撤', fmtTWD(-Math.round(maxDD)), 'down', maxDD>0?`${ddStart} → ${ddEnd}`:'尚無回撤');
 
-  renderHeatmap(filtered);
+  renderLeaderboard(filtered);
 }
 
-function isoWeekKey(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = (d.getDay()+6)%7; // Monday=0
-  d.setDate(d.getDate() - day); // back to Monday of this week
-  return d.toISOString().slice(0,10);
-}
-
-function renderHeatmap(filtered) {
-  const weekMap = {};
+function renderLeaderboard(filtered) {
+  const agg = {};
   filtered.forEach(r => {
-    const wk = isoWeekKey(r.date);
-    weekMap[wk] = (weekMap[wk]||0) + toTWD(r.pnl, r.currency);
+    const key = r.market + '|' + r.symbol;
+    if (!agg[key]) agg[key] = { market: r.market, symbol: r.symbol || '—', total: 0, count: 0 };
+    agg[key].total += toTWD(r.pnl, r.currency);
+    agg[key].count += 1;
   });
-  const weekKeys = Object.keys(weekMap).sort();
-  if (!weekKeys.length) { document.getElementById('heatmap-grid').innerHTML=''; return; }
+  const list = Object.values(agg);
+  const gainers = list.filter(x=>x.total>0).sort((a,b)=>b.total-a.total).slice(0,10);
+  const losers = list.filter(x=>x.total<0).sort((a,b)=>a.total-b.total).slice(0,10);
 
-  // 預設只顯示最近 52 週（像 GitHub 貢獻圖），避免早期資料稀疏時整片空白
-  const WINDOW_WEEKS = 52;
-  const todayWk = new Date(isoWeekKey(today.toISOString().slice(0,10))+'T00:00:00');
-  const earliestWk = new Date(weekKeys[0]+'T00:00:00');
-  const windowStart = new Date(todayWk);
-  windowStart.setDate(windowStart.getDate() - (WINDOW_WEEKS-1)*7);
-  const rangeStart = windowStart > earliestWk ? windowStart : earliestWk;
+  const row = (item, rank) => `<div class="lb-row">
+    <span class="lb-rank">${rank}</span>
+    <span class="badge badge-${item.market.toLowerCase()}">${mktLabel(item.market)}</span>
+    <span class="lb-sym">${item.symbol}</span>
+    <div class="lb-right">
+      <span class="lb-val ${cc(item.total)}">${fmtTWD(Math.round(item.total))}</span>
+      <span class="lb-count">${item.count} 筆</span>
+    </div>
+  </div>`;
 
-  // fill in missing weeks between rangeStart and today so the grid is continuous
-  const allWeeks = [];
-  let cur = new Date(rangeStart);
-  while (cur <= todayWk) {
-    allWeeks.push(cur.toISOString().slice(0,10));
-    cur.setDate(cur.getDate()+7);
-  }
-
-  const maxAbs = Math.max(...allWeeks.map(k=>Math.abs(weekMap[k]||0)), 1);
-
-  let monthsHtml = '';
-  let lastMonth = '';
-  const cellsHtml = allWeeks.map(wk => {
-    const v = weekMap[wk] || 0;
-    const has = weekMap[wk] !== undefined;
-    let bg = 'var(--bg3)';
-    if (has && v !== 0) {
-      const intensity = Math.min(Math.abs(v) / maxAbs, 1);
-      const alpha = (0.18 + intensity * 0.72).toFixed(2);
-      bg = v > 0 ? `rgba(229,57,53,${alpha})` : `rgba(38,166,154,${alpha})`;
-    }
-    const mth = wk.slice(0,7);
-    if (mth !== lastMonth) {
-      lastMonth = mth;
-      monthsHtml += `<span style="width:16px;display:inline-block;">${parseInt(wk.slice(5,7))}月</span>`;
-    } else {
-      monthsHtml += `<span style="width:16px;display:inline-block;"></span>`;
-    }
-    const title = `週起 ${wk}：${has ? fmtTWD(Math.round(v)) : '無交易'}`;
-    return `<div class="heatmap-cell" style="background:${bg};" title="${title}"></div>`;
-  }).join('');
-
-  document.getElementById('heatmap-months').innerHTML = monthsHtml;
-  document.getElementById('heatmap-grid').innerHTML = cellsHtml;
+  document.getElementById('lb-gainers').innerHTML = gainers.length
+    ? gainers.map((x,i)=>row(x,i+1)).join('')
+    : '<div class="empty-state" style="padding:20px 0;">尚無獲利記錄</div>';
+  document.getElementById('lb-losers').innerHTML = losers.length
+    ? losers.map((x,i)=>row(x,i+1)).join('')
+    : '<div class="empty-state" style="padding:20px 0;">尚無虧損記錄</div>';
 }
 
 // ── CHART ──
