@@ -338,7 +338,7 @@
 
     <div class="card">
       <div class="card-title">週損益熱力圖</div>
-      <div class="card-sub">每一格代表一週的累計損益（台幣），顏色越深代表金額越大 · 紅色獲利 / 綠色虧損</div>
+      <div class="card-sub">最近 52 週，每一格代表一週的累計損益（台幣），顏色越深代表金額越大 · 紅色獲利 / 綠色虧損</div>
       <div class="heatmap-wrap">
         <div id="heatmap-months" class="heatmap-months"></div>
         <div class="heatmap-grid" id="heatmap-grid"></div>
@@ -558,27 +558,40 @@ async function importEmbeddedData() {
   const btn = document.getElementById('btn-import');
   btn.disabled = true; btn.textContent = '匯入中...';
 
+  // 保險機制：不管 localStorage 旗標狀態如何，一律用「目前已存在的 id」去比對，
+  // 只匯入還沒有的那些筆數，就算重複按也不會產生重複資料
+  const existingIds = new Set(records.map(r => String(r.id)));
+  const toImport = EMBEDDED_DATA.filter(r => !existingIds.has(String(r.id)));
+
+  if (!toImport.length) {
+    localStorage.setItem('imported_embedded_v1', '1');
+    document.getElementById('import-card').style.display = 'none';
+    showToast('這些記錄已經匯入過了，不會重複新增');
+    btn.disabled = false; btn.textContent = '📥 匯入 237 筆歷史記錄';
+    return;
+  }
+
   if (GS_URL) {
-    const res = await apiCall({ action: 'bulkImport', data: JSON.stringify(EMBEDDED_DATA) });
+    const res = await apiCall({ action: 'bulkImport', data: JSON.stringify(toImport) });
     if (!res || res.error) {
       showToast('⚠ 雲端匯入失敗，改存到本機');
-      records = records.concat(EMBEDDED_DATA);
+      records = records.concat(toImport);
     } else {
       await loadFromSheets();
       localStorage.setItem('imported_embedded_v1', '1');
-      showToast('✓ 已匯入 ' + EMBEDDED_DATA.length + ' 筆到 Google Sheets');
+      showToast('✓ 已匯入 ' + toImport.length + ' 筆到 Google Sheets');
       document.getElementById('import-card').style.display = 'none';
       btn.disabled = false; btn.textContent = '📥 匯入 237 筆歷史記錄';
       return;
     }
   } else {
-    records = records.concat(EMBEDDED_DATA);
+    records = records.concat(toImport);
   }
   records.sort((a,b) => a.date.localeCompare(b.date));
   saveLocal();
   localStorage.setItem('imported_embedded_v1', '1');
   document.getElementById('import-card').style.display = 'none';
-  showToast('✓ 已匯入 ' + EMBEDDED_DATA.length + ' 筆記錄');
+  showToast('✓ 已匯入 ' + toImport.length + ' 筆記錄');
   renderAll(); updateFilterYears();
   btn.disabled = false; btn.textContent = '📥 匯入 237 筆歷史記錄';
 }
@@ -798,11 +811,18 @@ function renderHeatmap(filtered) {
   const weekKeys = Object.keys(weekMap).sort();
   if (!weekKeys.length) { document.getElementById('heatmap-grid').innerHTML=''; return; }
 
-  // fill in missing weeks between first and last so the grid is continuous
+  // 預設只顯示最近 52 週（像 GitHub 貢獻圖），避免早期資料稀疏時整片空白
+  const WINDOW_WEEKS = 52;
+  const todayWk = new Date(isoWeekKey(today.toISOString().slice(0,10))+'T00:00:00');
+  const earliestWk = new Date(weekKeys[0]+'T00:00:00');
+  const windowStart = new Date(todayWk);
+  windowStart.setDate(windowStart.getDate() - (WINDOW_WEEKS-1)*7);
+  const rangeStart = windowStart > earliestWk ? windowStart : earliestWk;
+
+  // fill in missing weeks between rangeStart and today so the grid is continuous
   const allWeeks = [];
-  let cur = new Date(weekKeys[0]+'T00:00:00');
-  const last = new Date(weekKeys[weekKeys.length-1]+'T00:00:00');
-  while (cur <= last) {
+  let cur = new Date(rangeStart);
+  while (cur <= todayWk) {
     allWeeks.push(cur.toISOString().slice(0,10));
     cur.setDate(cur.getDate()+7);
   }
