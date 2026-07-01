@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>股票損益記錄器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --up: #E53935;
+    --down: #26A69A;
+    --up-bg: rgba(229,57,53,0.10);
+    --down-bg: rgba(38,166,154,0.10);
+    --purple: #8b5cf6;
+    --purple-bg: rgba(139,92,246,0.12);
+    --blue: #3b82f6;
+    --blue-bg: rgba(59,130,246,0.10);
+    --amber: #f59e0b;
+    --amber-bg: rgba(245,158,11,0.12);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  /* LAYOUT */
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .logo { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .logo span { color: var(--up); }
+
+  /* NAV */
+  .nav { display: flex; gap: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; margin-bottom: 20px; overflow-x: auto; }
+  .nav-btn { flex: 1; padding: 9px 4px; border: none; border-radius: var(--radius-sm); background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); transition: all 0.15s; white-space: nowrap; min-width: 56px; }
+  .nav-btn.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+  .nav-btn:hover:not(.active) { color: var(--text); }
+
+  /* SECTION */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* FX BAR */
+  .fx-bar { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 18px; font-size: 13px; flex-wrap: wrap; }
+  .fx-bar label { color: var(--text2); }
+  .fx-input { width: 76px; font-size: 16px; padding: 4px 8px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text); font-family: 'SF Mono', monospace; }
+  .fx-bar .hint { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+  /* CARDS */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+  .card-sub { font-size: 11px; color: var(--text3); margin-top: -8px; margin-bottom: 14px; line-height: 1.5; }
+
+  /* SUMMARY */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .metric-value { font-size: 20px; font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .metric-sub { font-size: 10px; color: var(--text3); margin-top: 4px; font-family: -apple-system, sans-serif; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .neutral { color: var(--text2); }
+
+  /* FORM */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .field input, .field select { width: 100%; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text); outline: none; transition: border 0.15s; }
+  .field input:focus, .field select:focus { border-color: rgba(255,255,255,0.3); }
+  .field select option { background: var(--bg3); }
+
+  /* FUT EXTRA */
+  .fut-extra { background: var(--bg3); border: 1px solid var(--purple-bg); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px; display: none; }
+  .fut-extra-label { font-size: 11px; color: var(--purple); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+
+  /* BUTTONS */
+  .btn-primary { width: 100%; padding: 12px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text); transition: all 0.15s; }
+  .btn-primary:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.22); }
+  .btn-sm { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--text2); transition: all 0.12s; }
+  .btn-sm:hover { color: var(--text); border-color: var(--border2); }
+  .btn-del { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 20px; padding: 4px 10px; line-height: 1; transition: color 0.12s; }
+  .btn-del:hover { color: var(--up); }
+
+  /* TABLE */
+  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filters select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text2); }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+  th { font-size: 11px; color: var(--text3); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', monospace; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* BADGES */
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-family: -apple-system, sans-serif; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; }
+  .badge-tw { background: var(--up-bg); color: var(--up); }
+  .badge-us { background: var(--blue-bg); color: var(--blue); }
+  .badge-fut { background: var(--purple-bg); color: var(--purple); }
+
+  .conv-note { font-size: 10px; color: var(--text3); font-family: -apple-system, sans-serif; }
+
+  /* STATUS */
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); padding: 6px 0; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--down); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .dot.offline { background: var(--text3); animation: none; }
+
+  /* SETUP BANNER */
+  .setup-banner { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+  .setup-banner h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .setup-steps { counter-reset: step; }
+  .setup-step { display: flex; gap: 12px; margin-bottom: 10px; font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .setup-step::before { counter-increment: step; content: counter(step); min-width: 22px; height: 22px; background: var(--border2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text); text-align: center; line-height: 22px; flex-shrink: 0; }
+  .setup-step a { color: var(--blue); }
+  code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text); }
+  .url-input-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .url-input-row input { flex: 1; min-width: 200px; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text); }
+  .url-input-row button { padding: 8px 16px; background: var(--blue-bg); border: 1px solid var(--blue); border-radius: var(--radius-sm); color: var(--blue); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .skip-row { margin-top: 10px; }
+  .skip-row a { font-size: 12px; color: var(--text3); text-decoration: underline; cursor: pointer; }
+
+  /* CHART */
+  .chart-controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .chart-controls select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text2); }
+  .toggle-btn { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; }
+  .toggle-btn.on { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+
+  /* CALENDAR */
+  .cal-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .cal-nav-btn { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 14px; cursor: pointer; color: var(--text2); font-size: 18px; line-height: 1; transition: all 0.12s; }
+  .cal-nav-btn:hover { color: var(--text); border-color: var(--border2); }
+  .cal-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 8px; }
+  .cal-hdr { font-size: 11px; color: var(--text3); text-align: center; padding: 4px 0; text-transform: uppercase; letter-spacing: 0.05em; }
+  .cal-cell { min-height: 60px; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg3); transition: border-color 0.12s; }
+  .cal-cell.empty { background: transparent; border-color: transparent; }
+  .cal-cell.today { border-color: rgba(229,57,53,0.5); }
+  .cal-cell.has-up { border-left: 2px solid var(--up); }
+  .cal-cell.has-down { border-left: 2px solid var(--down); }
+  .cal-date-num { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+  .cal-pnl-val { font-size: 10.5px; font-weight: 600; font-family: 'SF Mono', monospace; }
+  .cal-cell.has-up .cal-pnl-val { color: var(--up); }
+  .cal-cell.has-down .cal-pnl-val { color: var(--down); }
+
+  /* YEAR */
+  .year-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .month-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+  .month-name { font-size: 12px; color: var(--text3); margin-bottom: 5px; }
+  .month-val { font-size: 17px; font-weight: 600; font-family: 'SF Mono', monospace; }
+  .year-total-row { margin-bottom: 16px; }
+  .year-total-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .year-total-val { font-size: 28px; font-weight: 700; font-family: 'SF Mono', monospace; }
+
+  /* GOAL */
+  .goal-box { margin-bottom: 20px; }
+  .goal-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .goal-row input { width: 140px; font-size: 16px; padding: 6px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg3); color: var(--text); }
+  .goal-row button { padding: 6px 14px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text2); font-size: 12px; cursor: pointer; }
+  .progress-track { width: 100%; height: 10px; background: var(--bg3); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; border-radius: 20px; transition: width 0.4s ease; background: var(--up); }
+  .progress-fill.down { background: var(--down); }
+  .progress-label { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-box { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+  .stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .stat-val { font-size: 19px; font-weight: 700; font-family: 'SF Mono', monospace; }
+  .stat-note { font-size: 10.5px; color: var(--text3); margin-top: 4px; font-family: -apple-system, sans-serif; }
+
+  /* HEATMAP */
+  .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+  .heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); gap: 3px; width: max-content; }
+  .heatmap-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--bg3); border: 1px solid var(--border); cursor: default; }
+  .heatmap-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: var(--text3); }
+  .heatmap-legend .heatmap-cell { width: 11px; height: 11px; }
+  .heatmap-months { display: flex; gap: 3px; width: max-content; font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+
+  .empty-state { text-align: center; padding: 36px; color: var(--text3); font-size: 14px; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 20px; font-size: 13px; color: var(--text); z-index: 9999; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 600px) {
+    .year-grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-btn { font-size: 11px; padding: 9px 3px; }
+    .metric-value { font-size: 16px; }
+    .container { padding: 16px 10px 50px; }
+    .card { padding: 14px 14px; }
+    .stat-val { font-size: 16px; }
+    .btn-del { font-size: 22px; padding: 6px 12px; }
+    .cal-nav-btn { padding: 8px 16px; font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">損益<span>紀錄</span></div>
+    <div class="status-bar">
+      <div class="dot offline" id="status-dot"></div>
+      <span id="status-text">本機儲存</span>
+    </div>
+  </div>
+
+  <!-- SETUP BANNER -->
+  <div class="setup-banner" id="setup-banner" style="display:none;">
+    <h3>☁️ 想要跨裝置同步？接上 Google Sheets（5分鐘，選用）</h3>
+    <div class="card-sub" style="margin-top:-4px;">不接也完全沒問題，資料會存在這台裝置的瀏覽器裡。想在手機、電腦間同步才需要做這步。</div>
+    <div class="setup-steps">
+      <div class="setup-step">前往 <a href="https://sheets.google.com" target="_blank">Google Sheets</a> 建立一個新試算表，名稱隨意</div>
+      <div class="setup-step">點上方選單「擴充功能 > Apps Script」，刪除預設內容</div>
+      <div class="setup-step">將 <code>Code.gs</code> 的內容全部貼進去，按儲存（💾）</div>
+      <div class="setup-step">點「部署 > 新增部署」，類型選「網頁應用程式」，執行身分選「我」，存取權選「所有人」，按部署</div>
+      <div class="setup-step">複製產生的「網頁應用程式網址」貼到下方</div>
+    </div>
+    <div class="url-input-row">
+      <input type="text" id="gs-url-input" placeholder="貼上 Apps Script 網址 https://script.google.com/macros/s/..." />
+      <button onclick="saveGsUrl()">儲存連線</button>
+    </div>
+  </div>
+  <div class="skip-row" id="setup-toggle-row">
+    <a onclick="toggleSetupBanner()" id="setup-toggle-link">☁️ 想跨裝置同步？點這裡設定 Google Sheets</a>
+  </div>
+
+  <!-- FX BAR -->
+  <div class="fx-bar">
+    <span style="color:var(--text2);">USD/TWD</span>
+    <input type="number" class="fx-input" id="fx-rate" value="31.5" step="0.01" onchange="refreshAll()" />
+    <span style="font-size:11px;color:var(--text3);">固定匯率 · 美股自動換算台幣</span>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav">
+    <button class="nav-btn active" onclick="showSection('record',this)">記錄損益</button>
+    <button class="nav-btn" onclick="showSection('stats',this)">統計</button>
+    <button class="nav-btn" onclick="showSection('chart',this)">折線圖</button>
+    <button class="nav-btn" onclick="showSection('calendar',this)">日曆</button>
+    <button class="nav-btn" onclick="showSection('year',this)">年曆</button>
+  </div>
+
+  <!-- ── RECORD ── -->
+  <div id="sec-record" class="section active">
+    <div class="summary-grid" id="summary-grid"></div>
+
+    <div class="card" id="import-card" style="display:none;">
+      <div class="card-title">匯入歷史資料</div>
+      <div class="card-sub">偵測到內建的 237 筆歷史交易紀錄尚未匯入，要一次加進來嗎？（只會執行一次）</div>
+      <button class="btn-primary" onclick="importEmbeddedData()" id="btn-import">📥 匯入 237 筆歷史記錄</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">新增記錄</div>
+      <div class="form-grid">
+        <div class="field"><label>日期</label><input type="date" id="f-date" /></div>
+        <div class="field"><label>市場</label>
+          <select id="f-market" onchange="onMarketChange()">
+            <option value="TW">台股</option>
+            <option value="US">美股</option>
+            <option value="FUT">期貨</option>
+          </select>
+        </div>
+        <div class="field"><label>代號 / 商品</label><input type="text" id="f-symbol" placeholder="2330 / AAPL / 台指" /></div>
+        <div class="field"><label>幣別</label>
+          <select id="f-currency">
+            <option value="TWD">TWD 台幣</option>
+            <option value="USD">USD 美元</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fut-extra" id="fut-extra">
+        <div class="fut-extra-label">▸ 期貨資訊（選填）</div>
+        <div class="form-grid">
+          <div class="field"><label>方向</label>
+            <select id="f-direction">
+              <option value="">—</option>
+              <option value="多">做多</option>
+              <option value="空">做空</option>
+            </select>
+          </div>
+          <div class="field"><label>口數</label><input type="number" id="f-lots" placeholder="1" min="1" step="1" /></div>
+          <div class="field"><label>到期月份</label><input type="text" id="f-expiry" placeholder="2026/06" /></div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="field"><label>損益金額</label><input type="number" id="f-pnl" placeholder="正數獲利 / 負數虧損" step="any" /></div>
+        <div class="field"><label>備註（選填）</label><input type="text" id="f-note" placeholder="出場原因、策略..." /></div>
+      </div>
+      <button class="btn-primary" onclick="addRecord()" id="btn-add">＋ 新增記錄</button>
+    </div>
+
+    <div class="card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0;">歷史記錄</div>
+        <div class="filters">
+          <select id="filter-market" onchange="renderTable()">
+            <option value="ALL">所有市場</option>
+            <option value="TW">台股</option>
+            <option value="US">美股</option>
+            <option value="FUT">期貨</option>
+          </select>
+          <select id="filter-year" onchange="renderTable()"><option value="ALL">所有年份</option></select>
+        </div>
+      </div>
+      <div id="table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- ── STATS ── -->
+  <div id="sec-stats" class="section">
+    <div class="card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0;">績效統計</div>
+        <div class="filters">
+          <select id="stats-mkt" onchange="renderStats()">
+            <option value="ALL">全部市場</option>
+            <option value="TW">台股</option>
+            <option value="US">美股</option>
+            <option value="FUT">期貨</option>
+          </select>
+        </div>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">週損益熱力圖</div>
+      <div class="card-sub">每一格代表一週的累計損益（台幣），顏色越深代表金額越大 · 紅色獲利 / 綠色虧損</div>
+      <div class="heatmap-wrap">
+        <div id="heatmap-months" class="heatmap-months"></div>
+        <div class="heatmap-grid" id="heatmap-grid"></div>
+      </div>
+      <div class="heatmap-legend">
+        <span>虧損</span>
+        <div class="heatmap-cell" style="background:rgba(38,166,154,0.85);"></div>
+        <div class="heatmap-cell" style="background:rgba(38,166,154,0.4);"></div>
+        <div class="heatmap-cell" style="background:var(--bg3);"></div>
+        <div class="heatmap-cell" style="background:rgba(229,57,53,0.4);"></div>
+        <div class="heatmap-cell" style="background:rgba(229,57,53,0.85);"></div>
+        <span>獲利</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CHART ── -->
+  <div id="sec-chart" class="section">
+    <div class="card">
+      <div class="chart-controls">
+        <select id="chart-gran" onchange="renderChart()">
+          <option value="daily">日線</option>
+          <option value="monthly" selected>月線</option>
+          <option value="yearly">年線</option>
+        </select>
+        <select id="chart-mkt" onchange="renderChart()">
+          <option value="ALL">全部市場</option>
+          <option value="TW">台股</option>
+          <option value="US">美股</option>
+          <option value="FUT">期貨</option>
+        </select>
+        <button class="toggle-btn on" id="btn-cumul" onclick="toggleCumul()">累積損益</button>
+      </div>
+      <div style="position:relative;width:100%;height:320px;">
+        <canvas id="pnl-chart" role="img" aria-label="損益折線圖（台幣計價）"></canvas>
+      </div>
+      <div id="chart-legend" style="margin-top:10px;font-size:12px;color:var(--text2);"></div>
+      <p style="font-size:11px;color:var(--text3);margin-top:8px;">美股損益已按匯率換算台幣 · 紅漲綠跌</p>
+    </div>
+  </div>
+
+  <!-- ── CALENDAR ── -->
+  <div id="sec-calendar" class="section">
+    <div class="card">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+        <span class="cal-title" id="cal-title"></span>
+        <button class="cal-nav-btn" onclick="calNext()">›</button>
+        <select style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text2);" id="cal-mkt" onchange="renderCalendar()">
+          <option value="ALL">全部</option><option value="TW">台股</option><option value="US">美股</option><option value="FUT">期貨</option>
+        </select>
+      </div>
+      <div class="summary-grid" id="cal-summary"></div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── YEAR ── -->
+  <div id="sec-year" class="section">
+    <div class="card">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="yearPrev()">‹</button>
+        <span class="cal-title" id="year-title"></span>
+        <button class="cal-nav-btn" onclick="yearNext()">›</button>
+        <select style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text2);" id="year-mkt" onchange="renderYearView()">
+          <option value="ALL">全部</option><option value="TW">台股</option><option value="US">美股</option><option value="FUT">期貨</option>
+        </select>
+      </div>
+      <div class="year-total-row">
+        <div class="year-total-label">全年損益（台幣）</div>
+        <div class="year-total-val" id="year-total">—</div>
+      </div>
+
+      <div class="goal-box">
+        <div class="goal-row">
+          <span style="font-size:12px;color:var(--text2);">年度目標 NT$</span>
+          <input type="number" id="goal-input" placeholder="例如 100000" step="1000" />
+          <button onclick="saveGoal()">儲存目標</button>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="goal-fill" style="width:0%;"></div></div>
+        <div class="progress-label" id="goal-label">尚未設定年度目標</div>
+      </div>
+
+      <div class="year-grid" id="year-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── EMBEDDED HISTORICAL DATA (imports once, works with or without Google Sheets) ──
+const EMBEDDED_DATA = [{"id":"imp0001","date":"2026-07-01","market":"TW","symbol":"2327","currency":"TWD","pnl":15333.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0002","date":"2026-06-30","market":"TW","symbol":"3481","currency":"TWD","pnl":1086.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0003","date":"2026-06-30","market":"US","symbol":"AMD","currency":"USD","pnl":31.97,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0004","date":"2026-06-29","market":"US","symbol":"QQQ","currency":"USD","pnl":1.75,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0005","date":"2026-06-29","market":"TW","symbol":"5425","currency":"TWD","pnl":-17714.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0006","date":"2026-06-29","market":"TW","symbol":"2483","currency":"TWD","pnl":64550.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0007","date":"2026-06-29","market":"TW","symbol":"2308","currency":"TWD","pnl":1868.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0008","date":"2026-06-25","market":"TW","symbol":"3317","currency":"TWD","pnl":-3342.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0009","date":"2026-06-25","market":"TW","symbol":"1785","currency":"TWD","pnl":-16189.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0010","date":"2026-06-24","market":"US","symbol":"PEP","currency":"USD","pnl":-5.21,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0011","date":"2026-06-23","market":"US","symbol":"MU","currency":"USD","pnl":2.36,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0012","date":"2026-06-22","market":"TW","symbol":"3357","currency":"TWD","pnl":3013.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0013","date":"2026-06-21","market":"US","symbol":"DRAM","currency":"USD","pnl":34.81,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0014","date":"2026-06-21","market":"US","symbol":"VOO","currency":"USD","pnl":19.68,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0015","date":"2026-06-21","market":"US","symbol":"SMH","currency":"USD","pnl":134.87,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0016","date":"2026-06-21","market":"TW","symbol":"5328","currency":"TWD","pnl":-2400.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0017","date":"2026-06-21","market":"TW","symbol":"3008","currency":"TWD","pnl":886.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0018","date":"2026-06-21","market":"TW","symbol":"8043","currency":"TWD","pnl":1599.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0019","date":"2026-06-21","market":"TW","symbol":"2484","currency":"TWD","pnl":-1899.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0020","date":"2026-06-17","market":"US","symbol":"INTC","currency":"USD","pnl":-0.24,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0021","date":"2026-06-16","market":"TW","symbol":"6202","currency":"TWD","pnl":4958.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0022","date":"2026-06-16","market":"TW","symbol":"6196","currency":"TWD","pnl":-7639.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0023","date":"2026-06-16","market":"TW","symbol":"3042","currency":"TWD","pnl":-2189.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0024","date":"2026-06-16","market":"TW","symbol":"2484","currency":"TWD","pnl":-5103.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0025","date":"2026-06-16","market":"US","symbol":"SPCX","currency":"USD","pnl":22.93,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0026","date":"2026-06-16","market":"US","symbol":"COHR","currency":"USD","pnl":-10.11,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0027","date":"2026-06-15","market":"FUT","symbol":"台指","currency":"TWD","pnl":-8466.0,"direction":"空","lots":"22","expiry":"2026/05","note":""},{"id":"imp0028","date":"2026-06-14","market":"US","symbol":"NVDA","currency":"USD","pnl":-14.65,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0029","date":"2026-06-14","market":"US","symbol":"MU","currency":"USD","pnl":60.03,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0030","date":"2026-06-11","market":"TW","symbol":"50","currency":"TWD","pnl":5318.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0031","date":"2026-06-10","market":"TW","symbol":"9933","currency":"TWD","pnl":-12279.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0032","date":"2026-06-10","market":"TW","symbol":"6173","currency":"TWD","pnl":1933.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0033","date":"2026-06-10","market":"TW","symbol":"5328","currency":"TWD","pnl":12750.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0034","date":"2026-06-10","market":"TW","symbol":"2426","currency":"TWD","pnl":1558.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0035","date":"2026-06-10","market":"TW","symbol":"50","currency":"TWD","pnl":-628.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0036","date":"2026-06-10","market":"TW","symbol":"6757","currency":"TWD","pnl":-1.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0037","date":"2026-06-10","market":"US","symbol":"VT","currency":"USD","pnl":0.39,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0038","date":"2026-06-10","market":"US","symbol":"GOOG","currency":"USD","pnl":12.26,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0039","date":"2026-06-10","market":"US","symbol":"QQQM","currency":"USD","pnl":118.61,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0040","date":"2026-06-10","market":"US","symbol":"AAPL","currency":"USD","pnl":16.3,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0041","date":"2026-06-10","market":"US","symbol":"NVDA","currency":"USD","pnl":10.99,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0042","date":"2026-06-10","market":"US","symbol":"AMD","currency":"USD","pnl":80.62,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0043","date":"2026-06-10","market":"US","symbol":"AVGO","currency":"USD","pnl":-25.14,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0044","date":"2026-06-10","market":"US","symbol":"MSFT","currency":"USD","pnl":-16.05,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0045","date":"2026-06-07","market":"TW","symbol":"5328","currency":"TWD","pnl":3282.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0046","date":"2026-06-07","market":"TW","symbol":"3673","currency":"TWD","pnl":-8589.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0047","date":"2026-06-07","market":"TW","symbol":"3615","currency":"TWD","pnl":-5824.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0048","date":"2026-06-07","market":"TW","symbol":"3481","currency":"TWD","pnl":-8042.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0049","date":"2026-06-07","market":"TW","symbol":"3231","currency":"TWD","pnl":-10460.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0050","date":"2026-06-04","market":"TW","symbol":"8299","currency":"TWD","pnl":-12746.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0051","date":"2026-06-04","market":"TW","symbol":"8027","currency":"TWD","pnl":878.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0052","date":"2026-06-04","market":"TW","symbol":"2455","currency":"TWD","pnl":-3615.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0053","date":"2026-06-04","market":"TW","symbol":"2356","currency":"TWD","pnl":15583.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0054","date":"2026-06-04","market":"TW","symbol":"2327","currency":"TWD","pnl":2005.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0055","date":"2026-06-03","market":"TW","symbol":"50","currency":"TWD","pnl":14704.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0056","date":"2026-05-28","market":"US","symbol":"NASA","currency":"USD","pnl":14.63,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0057","date":"2026-05-28","market":"US","symbol":"NASA","currency":"USD","pnl":5.25,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0058","date":"2026-05-27","market":"TW","symbol":"00981A","currency":"TWD","pnl":3775.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0059","date":"2026-05-27","market":"TW","symbol":"9816","currency":"TWD","pnl":6831.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0060","date":"2026-05-25","market":"TW","symbol":"5328","currency":"TWD","pnl":12277.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0061","date":"2026-05-25","market":"TW","symbol":"2395","currency":"TWD","pnl":103.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0062","date":"2026-05-25","market":"TW","symbol":"9816","currency":"TWD","pnl":745.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0063","date":"2026-05-25","market":"TW","symbol":"00403A","currency":"TWD","pnl":1762.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0064","date":"2026-05-24","market":"TW","symbol":"2049","currency":"TWD","pnl":181.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0065","date":"2026-05-21","market":"US","symbol":"MU","currency":"USD","pnl":24.48,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0066","date":"2026-05-19","market":"TW","symbol":"2454","currency":"TWD","pnl":381.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0067","date":"2026-05-19","market":"US","symbol":"TSLA","currency":"USD","pnl":-0.54,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0068","date":"2026-05-19","market":"US","symbol":"KO","currency":"USD","pnl":1.69,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0069","date":"2026-05-19","market":"US","symbol":"BRK B","currency":"USD","pnl":-5.07,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0070","date":"2026-05-18","market":"TW","symbol":"2303","currency":"TWD","pnl":352.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0071","date":"2026-05-18","market":"US","symbol":"DRAM","currency":"USD","pnl":-16.48,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0072","date":"2026-05-18","market":"US","symbol":"POET","currency":"USD","pnl":85.92,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0073","date":"2026-05-17","market":"TW","symbol":"7918","currency":"TWD","pnl":321.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0074","date":"2026-05-17","market":"TW","symbol":"1785","currency":"TWD","pnl":45630.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0075","date":"2026-05-17","market":"US","symbol":"DRAM","currency":"USD","pnl":5.45,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0076","date":"2026-05-17","market":"US","symbol":"POET","currency":"USD","pnl":51.18,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0077","date":"2026-05-14","market":"TW","symbol":"2408","currency":"TWD","pnl":4008.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0078","date":"2026-05-13","market":"TW","symbol":"8150","currency":"TWD","pnl":-6603.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0079","date":"2026-05-13","market":"TW","symbol":"1785","currency":"TWD","pnl":59265.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0080","date":"2026-05-10","market":"TW","symbol":"8150","currency":"TWD","pnl":-2431.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0081","date":"2026-05-07","market":"TW","symbol":"2308","currency":"TWD","pnl":2361.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0082","date":"2026-05-07","market":"US","symbol":"SNDK","currency":"USD","pnl":29.44,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0083","date":"2026-05-07","market":"US","symbol":"IONQ","currency":"USD","pnl":3.1,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0084","date":"2026-05-07","market":"US","symbol":"LITE","currency":"USD","pnl":-19.47,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0085","date":"2026-05-07","market":"US","symbol":"ORCL","currency":"USD","pnl":11.66,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0086","date":"2026-05-05","market":"TW","symbol":"6182","currency":"TWD","pnl":2063.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0087","date":"2026-05-05","market":"TW","symbol":"2308","currency":"TWD","pnl":9633.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0088","date":"2026-04-26","market":"TW","symbol":"2340","currency":"TWD","pnl":-43482.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0089","date":"2026-04-23","market":"TW","symbol":"2455","currency":"TWD","pnl":1227.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0090","date":"2026-04-23","market":"TW","symbol":"2308","currency":"TWD","pnl":15748.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0091","date":"2026-04-23","market":"TW","symbol":"9816","currency":"TWD","pnl":424.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0092","date":"2026-04-23","market":"TW","symbol":"885","currency":"TWD","pnl":280.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0093","date":"2026-04-22","market":"TW","symbol":"8111","currency":"TWD","pnl":-17938.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0094","date":"2026-04-22","market":"TW","symbol":"5439","currency":"TWD","pnl":2219.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0095","date":"2026-04-22","market":"TW","symbol":"2454","currency":"TWD","pnl":3561.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0096","date":"2026-04-22","market":"TW","symbol":"2308","currency":"TWD","pnl":12859.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0097","date":"2026-04-22","market":"TW","symbol":"50","currency":"TWD","pnl":1263.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0098","date":"2026-04-20","market":"TW","symbol":"5536","currency":"TWD","pnl":1868.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0099","date":"2026-04-20","market":"TW","symbol":"3017","currency":"TWD","pnl":205.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0100","date":"2026-04-19","market":"TW","symbol":"6515","currency":"TWD","pnl":692.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0101","date":"2026-04-19","market":"TW","symbol":"3715","currency":"TWD","pnl":137.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0102","date":"2026-04-19","market":"TW","symbol":"2485","currency":"TWD","pnl":-2322.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0103","date":"2026-04-19","market":"TW","symbol":"2330","currency":"TWD","pnl":4459.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0104","date":"2026-04-19","market":"TW","symbol":"1815","currency":"TWD","pnl":578.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0105","date":"2026-04-16","market":"TW","symbol":"5347","currency":"TWD","pnl":-990.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0106","date":"2026-04-16","market":"TW","symbol":"2485","currency":"TWD","pnl":-3749.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0107","date":"2026-04-16","market":"TW","symbol":"9816","currency":"TWD","pnl":430.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0108","date":"2026-04-15","market":"TW","symbol":"2367","currency":"TWD","pnl":-6020.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0109","date":"2026-04-14","market":"TW","symbol":"5452","currency":"TWD","pnl":-12759.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0110","date":"2026-04-09","market":"TW","symbol":"6285","currency":"TWD","pnl":709.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0111","date":"2026-03-31","market":"TW","symbol":"2485","currency":"TWD","pnl":29.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0112","date":"2026-03-31","market":"TW","symbol":"2308","currency":"TWD","pnl":90.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0113","date":"2026-03-30","market":"TW","symbol":"6442","currency":"TWD","pnl":-2402.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0114","date":"2026-03-30","market":"TW","symbol":"3081","currency":"TWD","pnl":512.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0115","date":"2026-03-30","market":"TW","symbol":"2451","currency":"TWD","pnl":-19278.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0116","date":"2026-03-18","market":"TW","symbol":"2485","currency":"TWD","pnl":-1560.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0117","date":"2026-03-18","market":"TW","symbol":"2464","currency":"TWD","pnl":-931.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0118","date":"2026-03-17","market":"TW","symbol":"6167","currency":"TWD","pnl":2416.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0119","date":"2026-03-17","market":"TW","symbol":"3576","currency":"TWD","pnl":-1200.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0120","date":"2026-03-17","market":"TW","symbol":"3066","currency":"TWD","pnl":677.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0121","date":"2026-03-17","market":"TW","symbol":"2485","currency":"TWD","pnl":857.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0122","date":"2026-03-17","market":"TW","symbol":"2464","currency":"TWD","pnl":-4554.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0123","date":"2026-03-17","market":"TW","symbol":"2436","currency":"TWD","pnl":408.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0124","date":"2026-03-17","market":"TW","symbol":"2355","currency":"TWD","pnl":191.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0125","date":"2026-03-17","market":"TW","symbol":"1785","currency":"TWD","pnl":13052.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0126","date":"2026-03-17","market":"TW","symbol":"50","currency":"TWD","pnl":704.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0127","date":"2026-03-16","market":"TW","symbol":"6443","currency":"TWD","pnl":1643.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0128","date":"2026-03-16","market":"TW","symbol":"4956","currency":"TWD","pnl":961.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0129","date":"2026-03-16","market":"TW","symbol":"9816","currency":"TWD","pnl":121.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0130","date":"2026-03-16","market":"TW","symbol":"919","currency":"TWD","pnl":120.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0131","date":"2026-03-16","market":"TW","symbol":"878","currency":"TWD","pnl":464.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0132","date":"2026-03-15","market":"TW","symbol":"6456","currency":"TWD","pnl":-1576.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0133","date":"2026-03-15","market":"TW","symbol":"6443","currency":"TWD","pnl":309.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0134","date":"2026-03-15","market":"TW","symbol":"4949","currency":"TWD","pnl":-7586.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0135","date":"2026-03-15","market":"TW","symbol":"3211","currency":"TWD","pnl":-132.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0136","date":"2026-03-15","market":"TW","symbol":"2408","currency":"TWD","pnl":77.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0137","date":"2026-03-15","market":"TW","symbol":"1785","currency":"TWD","pnl":-1476.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0138","date":"2026-03-12","market":"TW","symbol":"4960","currency":"TWD","pnl":3826.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0139","date":"2026-03-12","market":"TW","symbol":"2426","currency":"TWD","pnl":2693.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0140","date":"2026-03-12","market":"TW","symbol":"1785","currency":"TWD","pnl":1386.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0141","date":"2026-03-11","market":"TW","symbol":"2449","currency":"TWD","pnl":311.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0142","date":"2026-03-10","market":"TW","symbol":"6443","currency":"TWD","pnl":1105.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0143","date":"2026-03-10","market":"TW","symbol":"6244","currency":"TWD","pnl":469.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0144","date":"2026-03-08","market":"TW","symbol":"6443","currency":"TWD","pnl":-1352.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0145","date":"2026-03-05","market":"TW","symbol":"6443","currency":"TWD","pnl":-581.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0146","date":"2026-03-05","market":"TW","symbol":"6244","currency":"TWD","pnl":-377.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0147","date":"2026-03-05","market":"TW","symbol":"2485","currency":"TWD","pnl":563.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0148","date":"2026-03-04","market":"TW","symbol":"6285","currency":"TWD","pnl":-3740.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0149","date":"2026-03-04","market":"TW","symbol":"6244","currency":"TWD","pnl":-6748.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0150","date":"2026-03-04","market":"TW","symbol":"3450","currency":"TWD","pnl":-27796.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0151","date":"2026-03-04","market":"TW","symbol":"2313","currency":"TWD","pnl":-18938.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0152","date":"2026-03-03","market":"TW","symbol":"3481","currency":"TWD","pnl":-9236.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0153","date":"2026-03-03","market":"TW","symbol":"3019","currency":"TWD","pnl":-6066.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0154","date":"2026-03-03","market":"TW","symbol":"2609","currency":"TWD","pnl":-2596.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0155","date":"2026-03-03","market":"TW","symbol":"2367","currency":"TWD","pnl":-2330.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0156","date":"2026-03-03","market":"TW","symbol":"9816","currency":"TWD","pnl":-592.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0157","date":"2026-03-02","market":"TW","symbol":"8299","currency":"TWD","pnl":-1759.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0158","date":"2026-03-02","market":"TW","symbol":"6443","currency":"TWD","pnl":-1325.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0159","date":"2026-03-02","market":"TW","symbol":"6442","currency":"TWD","pnl":2715.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0160","date":"2026-03-02","market":"TW","symbol":"2367","currency":"TWD","pnl":-927.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0161","date":"2026-03-02","market":"TW","symbol":"1802","currency":"TWD","pnl":1701.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0162","date":"2026-03-01","market":"TW","symbol":"6285","currency":"TWD","pnl":-1383.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0163","date":"2026-03-01","market":"TW","symbol":"6244","currency":"TWD","pnl":-154.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0164","date":"2026-03-01","market":"TW","symbol":"3481","currency":"TWD","pnl":537.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0165","date":"2026-03-01","market":"TW","symbol":"2367","currency":"TWD","pnl":8634.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0166","date":"2026-03-01","market":"TW","symbol":"2327","currency":"TWD","pnl":-41.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0167","date":"2026-03-01","market":"TW","symbol":"2317","currency":"TWD","pnl":1465.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0168","date":"2026-03-01","market":"TW","symbol":"1717","currency":"TWD","pnl":-4409.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0169","date":"2026-03-01","market":"TW","symbol":"6208","currency":"TWD","pnl":121.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0170","date":"2026-02-25","market":"TW","symbol":"3533","currency":"TWD","pnl":1295.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0171","date":"2026-02-25","market":"TW","symbol":"2367","currency":"TWD","pnl":111.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0172","date":"2026-02-24","market":"TW","symbol":"3675","currency":"TWD","pnl":995.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0173","date":"2026-02-24","market":"TW","symbol":"2308","currency":"TWD","pnl":849.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0174","date":"2026-02-23","market":"TW","symbol":"6442","currency":"TWD","pnl":219.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0175","date":"2026-02-23","market":"TW","symbol":"3533","currency":"TWD","pnl":308.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0176","date":"2026-02-10","market":"TW","symbol":"3550","currency":"TWD","pnl":-8268.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0177","date":"2026-02-08","market":"TW","symbol":"6443","currency":"TWD","pnl":-999.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0178","date":"2026-02-08","market":"TW","symbol":"3550","currency":"TWD","pnl":625.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0179","date":"2026-02-08","market":"TW","symbol":"3481","currency":"TWD","pnl":-392.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0180","date":"2026-02-08","market":"TW","symbol":"3481","currency":"TWD","pnl":-392.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0181","date":"2026-02-08","market":"TW","symbol":"2367","currency":"TWD","pnl":-6573.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0182","date":"2026-02-08","market":"TW","symbol":"1802","currency":"TWD","pnl":-4445.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0183","date":"2026-02-05","market":"TW","symbol":"6442","currency":"TWD","pnl":3585.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0184","date":"2026-02-05","market":"TW","symbol":"6285","currency":"TWD","pnl":166.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0185","date":"2026-02-05","market":"TW","symbol":"4714","currency":"TWD","pnl":-220.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0186","date":"2026-02-05","market":"TW","symbol":"3653","currency":"TWD","pnl":-216.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0187","date":"2026-02-05","market":"TW","symbol":"3017","currency":"TWD","pnl":-640.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0188","date":"2026-02-05","market":"TW","symbol":"2367","currency":"TWD","pnl":1141.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0189","date":"2026-02-05","market":"TW","symbol":"2330","currency":"TWD","pnl":-59.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0190","date":"2026-02-05","market":"TW","symbol":"2308","currency":"TWD","pnl":-669.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0191","date":"2026-02-05","market":"TW","symbol":"1815","currency":"TWD","pnl":-2283.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0192","date":"2026-02-05","market":"TW","symbol":"1802","currency":"TWD","pnl":-4209.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0193","date":"2026-02-05","market":"TW","symbol":"9816","currency":"TWD","pnl":-494.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0194","date":"2026-02-04","market":"TW","symbol":"6442","currency":"TWD","pnl":4854.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0195","date":"2026-02-04","market":"TW","symbol":"6285","currency":"TWD","pnl":3578.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0196","date":"2026-02-04","market":"TW","symbol":"3324","currency":"TWD","pnl":192.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0197","date":"2026-02-03","market":"TW","symbol":"2383","currency":"TWD","pnl":31.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0198","date":"2026-02-02","market":"TW","symbol":"6443","currency":"TWD","pnl":108.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0199","date":"2026-02-01","market":"TW","symbol":"2408","currency":"TWD","pnl":-771.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0200","date":"2026-02-01","market":"US","symbol":"TSLA","currency":"USD","pnl":-46.28,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0201","date":"2026-02-01","market":"US","symbol":"MU","currency":"USD","pnl":22.87,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0202","date":"2026-02-01","market":"US","symbol":"GOOGL","currency":"USD","pnl":45.96,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0203","date":"2026-02-01","market":"US","symbol":"LLY","currency":"USD","pnl":-5.02,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0204","date":"2026-01-28","market":"TW","symbol":"6443","currency":"TWD","pnl":-2.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0205","date":"2026-01-28","market":"TW","symbol":"6443","currency":"TWD","pnl":-1087.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0206","date":"2026-01-26","market":"TW","symbol":"2408","currency":"TWD","pnl":4104.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0207","date":"2026-01-26","market":"TW","symbol":"2367","currency":"TWD","pnl":701.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0208","date":"2026-01-26","market":"TW","symbol":"2329","currency":"TWD","pnl":-820.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0209","date":"2026-01-25","market":"TW","symbol":"6182","currency":"TWD","pnl":-644.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0210","date":"2026-01-25","market":"TW","symbol":"6208","currency":"TWD","pnl":622.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0211","date":"2026-01-21","market":"TW","symbol":"2329","currency":"TWD","pnl":-332.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0212","date":"2025-03-30","market":"TW","symbol":"2374","currency":"TWD","pnl":112.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0213","date":"2024-12-11","market":"TW","symbol":"1442","currency":"TWD","pnl":-528.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0214","date":"2024-12-08","market":"TW","symbol":"1611","currency":"TWD","pnl":-2253.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0215","date":"2024-07-16","market":"TW","symbol":"1432","currency":"TWD","pnl":-6.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0216","date":"2024-03-12","market":"TW","symbol":"4714","currency":"TWD","pnl":16731.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0217","date":"2024-03-06","market":"TW","symbol":"6776","currency":"TWD","pnl":3703.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0218","date":"2024-01-11","market":"TW","symbol":"6282","currency":"TWD","pnl":-39939.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0219","date":"2024-01-11","market":"TW","symbol":"3706","currency":"TWD","pnl":-5963.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0220","date":"2023-08-03","market":"TW","symbol":"2356","currency":"TWD","pnl":-20912.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0221","date":"2023-08-03","market":"TW","symbol":"1605","currency":"TWD","pnl":-4183.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0222","date":"2023-08-01","market":"TW","symbol":"2402","currency":"TWD","pnl":-1463.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0223","date":"2023-07-26","market":"TW","symbol":"3652","currency":"TWD","pnl":-4272.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0224","date":"2023-07-20","market":"TW","symbol":"6214","currency":"TWD","pnl":3864.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0225","date":"2023-07-20","market":"TW","symbol":"3481","currency":"TWD","pnl":1016.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0226","date":"2023-07-12","market":"TW","symbol":"3025","currency":"TWD","pnl":393.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0227","date":"2023-07-10","market":"TW","symbol":"4934","currency":"TWD","pnl":1972.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0228","date":"2023-07-10","market":"TW","symbol":"1522","currency":"TWD","pnl":-3253.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0229","date":"2023-07-05","market":"TW","symbol":"3013","currency":"TWD","pnl":7959.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0230","date":"2023-07-05","market":"TW","symbol":"2340","currency":"TWD","pnl":3914.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0231","date":"2023-07-05","market":"TW","symbol":"1471","currency":"TWD","pnl":3102.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0232","date":"2023-06-18","market":"TW","symbol":"1528","currency":"TWD","pnl":7314.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0233","date":"2023-06-14","market":"TW","symbol":"3346","currency":"TWD","pnl":1422.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0234","date":"2023-06-12","market":"TW","symbol":"4510","currency":"TWD","pnl":60.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0235","date":"2023-06-08","market":"TW","symbol":"1514","currency":"TWD","pnl":-4737.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0236","date":"2023-06-06","market":"TW","symbol":"3231","currency":"TWD","pnl":2867.0,"direction":"","lots":"","expiry":"","note":""},{"id":"imp0237","date":"2023-03-15","market":"TW","symbol":"3029","currency":"TWD","pnl":5645.0,"direction":"","lots":"","expiry":"","note":""}];
+
+// ── STATE ──
+let records = [];
+let chartInst = null;
+let showCumul = true;
+let calYear, calMonth, viewYear;
+let GS_URL = '';
+const today = new Date();
+calYear = today.getFullYear(); calMonth = today.getMonth(); viewYear = today.getFullYear();
+
+// ── INIT ──
+window.onload = async () => {
+  document.getElementById('f-date').value = today.toISOString().split('T')[0];
+  GS_URL = localStorage.getItem('gs_url') || '';
+  const fxSaved = localStorage.getItem('fx_rate');
+  if (fxSaved) document.getElementById('fx-rate').value = fxSaved;
+
+  if (GS_URL) {
+    document.getElementById('gs-url-input').value = GS_URL;
+    document.getElementById('setup-toggle-row').style.display = 'none';
+    await loadFromSheets();
+  } else {
+    loadLocal();
+    renderAll();
+    updateFilterYears();
+  }
+  checkImportPrompt();
+};
+
+// ── GOOGLE SHEETS URL (OPTIONAL) ──
+function toggleSetupBanner() {
+  const b = document.getElementById('setup-banner');
+  b.style.display = b.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveGsUrl() {
+  const url = document.getElementById('gs-url-input').value.trim();
+  if (!url.startsWith('https://script.google.com')) {
+    showToast('請貼上正確的 Apps Script 網址'); return;
+  }
+  GS_URL = url;
+  localStorage.setItem('gs_url', url);
+  document.getElementById('setup-banner').style.display = 'none';
+  document.getElementById('setup-toggle-row').style.display = 'none';
+  showToast('✓ 已儲存，正在連線...');
+  loadFromSheets();
+}
+
+// ── API ──
+async function apiCall(params) {
+  if (!GS_URL) return null;
+  const url = GS_URL + '?' + new URLSearchParams(params).toString();
+  try {
+    const res = await fetch(url);
+    return await res.json();
+  } catch(e) {
+    console.error('API error', e);
+    return null;
+  }
+}
+
+// 修正 Google Sheets 把日期自動轉成 Date 物件、序列化成 UTC ISO 造成的時區偏移問題
+function normalizeDate(raw) {
+  if (!raw) return raw;
+  const s = String(raw);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit' }).format(d);
+  } catch(e) {
+    return s.slice(0,10);
+  }
+}
+
+async function loadFromSheets() {
+  setStatus('連線中...', false);
+  const data = await apiCall({ action: 'getAll' });
+  if (!data || data.error) {
+    setStatus('連線失敗 · 已切回本機', false);
+    showToast('⚠ 無法連線到 Google Sheets，改用本機資料');
+    loadLocal(); renderAll(); updateFilterYears(); checkImportPrompt(); return;
+  }
+  records = (data.records || []).map(r => ({
+    ...r,
+    id: String(r.id),
+    date: normalizeDate(r.date),
+    pnl: parseFloat(r.pnl) || 0,
+  })).sort((a,b) => a.date.localeCompare(b.date));
+  saveLocal();
+  setStatus('已連線 · Google Sheets', true);
+  renderAll();
+  updateFilterYears();
+  checkImportPrompt();
+}
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem('pnl_records_v1');
+    if (raw) records = JSON.parse(raw);
+  } catch(e) {}
+}
+
+function saveLocal() {
+  localStorage.setItem('pnl_records_v1', JSON.stringify(records));
+}
+
+function setStatus(text, online) {
+  document.getElementById('status-text').textContent = GS_URL ? text : (text === '本機儲存' ? text : text);
+  const dot = document.getElementById('status-dot');
+  dot.className = 'dot' + (online ? '' : ' offline');
+  if (!GS_URL) { document.getElementById('status-text').textContent = '本機儲存'; }
+}
+
+// ── ONE-TIME IMPORT OF EMBEDDED HISTORICAL DATA ──
+function checkImportPrompt() {
+  const done = localStorage.getItem('imported_embedded_v1') === '1';
+  const alreadyHasImported = records.some(r => r.id && r.id.startsWith('imp'));
+  document.getElementById('import-card').style.display = (!done && !alreadyHasImported) ? 'block' : 'none';
+}
+
+async function importEmbeddedData() {
+  const btn = document.getElementById('btn-import');
+  btn.disabled = true; btn.textContent = '匯入中...';
+
+  if (GS_URL) {
+    const res = await apiCall({ action: 'bulkImport', data: JSON.stringify(EMBEDDED_DATA) });
+    if (!res || res.error) {
+      showToast('⚠ 雲端匯入失敗，改存到本機');
+      records = records.concat(EMBEDDED_DATA);
+    } else {
+      await loadFromSheets();
+      localStorage.setItem('imported_embedded_v1', '1');
+      showToast('✓ 已匯入 ' + EMBEDDED_DATA.length + ' 筆到 Google Sheets');
+      document.getElementById('import-card').style.display = 'none';
+      btn.disabled = false; btn.textContent = '📥 匯入 237 筆歷史記錄';
+      return;
+    }
+  } else {
+    records = records.concat(EMBEDDED_DATA);
+  }
+  records.sort((a,b) => a.date.localeCompare(b.date));
+  saveLocal();
+  localStorage.setItem('imported_embedded_v1', '1');
+  document.getElementById('import-card').style.display = 'none';
+  showToast('✓ 已匯入 ' + EMBEDDED_DATA.length + ' 筆記錄');
+  renderAll(); updateFilterYears();
+  btn.disabled = false; btn.textContent = '📥 匯入 237 筆歷史記錄';
+}
+
+// ── HELPERS ──
+function getFx() { return parseFloat(document.getElementById('fx-rate').value) || 31.5; }
+function toTWD(pnl, cur) { return cur === 'USD' ? pnl * getFx() : pnl; }
+function cc(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'neutral'; }
+function fmtTWD(v) {
+  const abs = Math.round(Math.abs(v)).toLocaleString('zh-TW');
+  return (v >= 0 ? '+' : '-') + 'NT$' + abs;
+}
+function fmtOrig(v, cur) {
+  const dp = cur === 'USD' ? 2 : 0;
+  const abs = Math.abs(v).toLocaleString('zh-TW', {minimumFractionDigits:dp,maximumFractionDigits:dp});
+  return (v >= 0 ? '+' : '-') + (cur==='USD'?'US$':'NT$') + abs;
+}
+function mktLabel(m) { return m==='TW'?'台股':m==='US'?'美股':'期貨'; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── NAV ──
+function showSection(name, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-'+name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name==='chart') renderChart();
+  if (name==='calendar') renderCalendar();
+  if (name==='year') renderYearView();
+  if (name==='stats') renderStats();
+}
+
+function onMarketChange() {
+  const m = document.getElementById('f-market').value;
+  document.getElementById('f-currency').value = m==='US' ? 'USD' : 'TWD';
+  document.getElementById('fut-extra').style.display = m==='FUT' ? 'block' : 'none';
+}
+
+// ── ADD ──
+async function addRecord() {
+  const date = document.getElementById('f-date').value;
+  const market = document.getElementById('f-market').value;
+  const symbol = document.getElementById('f-symbol').value.trim().toUpperCase();
+  const pnl = parseFloat(document.getElementById('f-pnl').value);
+  const currency = document.getElementById('f-currency').value;
+  const note = document.getElementById('f-note').value.trim();
+  const direction = market==='FUT' ? document.getElementById('f-direction').value : '';
+  const lots = market==='FUT' ? document.getElementById('f-lots').value : '';
+  const expiry = market==='FUT' ? document.getElementById('f-expiry').value.trim() : '';
+  if (!date || isNaN(pnl)) { showToast('請填入日期與損益金額'); return; }
+
+  const rec = { id: Date.now().toString(), date, market, symbol, pnl, currency, note, direction, lots, expiry };
+
+  const btn = document.getElementById('btn-add');
+  btn.disabled = true; btn.textContent = '儲存中...';
+
+  if (GS_URL) {
+    const res = await apiCall({ action: 'add', data: JSON.stringify(rec) });
+    if (!res || res.error) { showToast('⚠ 儲存失敗：' + (res?.error||'網路錯誤')); btn.disabled=false; btn.textContent='＋ 新增記錄'; return; }
+  }
+
+  records.push(rec);
+  records.sort((a,b) => a.date.localeCompare(b.date));
+  saveLocal();
+  ['f-pnl','f-symbol','f-note','f-lots','f-expiry'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('f-direction').value = '';
+  btn.disabled=false; btn.textContent='＋ 新增記錄';
+  showToast('✓ 已儲存');
+  renderAll(); updateFilterYears();
+}
+
+// ── DELETE ──
+async function deleteRecord(id) {
+  if (!confirm('確定刪除這筆記錄？')) return;
+  if (GS_URL) {
+    const res = await apiCall({ action: 'delete', id });
+    if (!res || res.error) { showToast('⚠ 刪除失敗'); return; }
+  }
+  records = records.filter(r => String(r.id) !== String(id));
+  saveLocal();
+  showToast('已刪除');
+  renderAll(); updateFilterYears();
+}
+
+// ── SUMMARY (期貨卡片已移除，但仍計入總損益) ──
+function renderSummary() {
+  const all = records.reduce((s,r) => s+toTWD(r.pnl,r.currency), 0);
+  const tw = records.filter(r=>r.market==='TW').reduce((s,r)=>s+toTWD(r.pnl,r.currency),0);
+  const us = records.filter(r=>r.market==='US').reduce((s,r)=>s+toTWD(r.pnl,r.currency),0);
+  const yr = today.getFullYear();
+  const yrPnl = records.filter(r=>r.date.startsWith(String(yr))).reduce((s,r)=>s+toTWD(r.pnl,r.currency),0);
+  const mk = (label, val, hasData) => `<div class="metric"><div class="metric-label">${label}</div><div class="metric-value ${hasData?cc(val):'neutral'}">${hasData?fmtTWD(val):'—'}</div></div>`;
+  document.getElementById('summary-grid').innerHTML =
+    mk('總損益 TWD', all, records.length>0) +
+    mk('台股', tw, records.some(r=>r.market==='TW')) +
+    mk('美股', us, records.some(r=>r.market==='US')) +
+    mk(yr+' 全年', yrPnl, records.some(r=>r.date.startsWith(String(yr))));
+}
+
+function updateFilterYears() {
+  const years = [...new Set(records.map(r=>r.date.slice(0,4)))].sort().reverse();
+  const sel = document.getElementById('filter-year');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="ALL">所有年份</option>' + years.map(y=>`<option value="${y}"${y===cur?' selected':''}>${y}</option>`).join('');
+}
+
+// ── TABLE ──
+function renderTable() {
+  const mf = document.getElementById('filter-market').value;
+  const yf = document.getElementById('filter-year').value;
+  const filtered = records.filter(r=>(mf==='ALL'||r.market===mf)&&(yf==='ALL'||r.date.startsWith(yf))).slice().reverse();
+  if (!filtered.length) {
+    document.getElementById('table-wrap').innerHTML = '<div class="empty-state">尚無記錄，新增第一筆吧</div>'; return;
+  }
+  const hasFut = filtered.some(r=>r.market==='FUT');
+  document.getElementById('table-wrap').innerHTML = `
+    <div class="table-scroll">
+    <table>
+      <thead><tr>
+        <th>日期</th><th>市場</th><th>代號</th>
+        ${hasFut?'<th>方向</th><th>口數</th>':''}
+        <th>原幣損益</th><th>台幣損益</th><th>備註</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${filtered.map(r => {
+          const twd = toTWD(r.pnl, r.currency);
+          const isUS = r.currency==='USD';
+          const isFUT = r.market==='FUT';
+          return `<tr>
+            <td style="color:var(--text2);font-size:12px;">${r.date}</td>
+            <td><span class="badge badge-${r.market.toLowerCase()}">${mktLabel(r.market)}</span></td>
+            <td style="color:var(--text);">${r.symbol||'—'}</td>
+            ${hasFut?`<td style="font-family:sans-serif;font-size:12px;color:var(--text2);">${isFUT&&r.direction?r.direction:'—'}</td><td style="font-family:sans-serif;font-size:12px;color:var(--text2);">${isFUT&&r.lots?r.lots+'口':'—'}</td>`:''}
+            <td class="${cc(r.pnl)}">${fmtOrig(r.pnl,r.currency)}</td>
+            <td class="${cc(twd)}">${fmtTWD(twd)}${isUS?`<div class="conv-note">×${getFx().toFixed(2)}</div>`:''}</td>
+            <td style="color:var(--text3);font-family:sans-serif;font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.note||(isFUT&&r.expiry?r.expiry:'—')}</td>
+            <td><button class="btn-del" onclick="deleteRecord('${r.id}')" title="刪除">×</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+}
+
+// ── STATS ──
+function renderStats() {
+  const mf = document.getElementById('stats-mkt').value;
+  const filtered = records.filter(r=>mf==='ALL'||r.market===mf).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const grid = document.getElementById('stats-grid');
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">這個篩選條件下尚無資料</div>';
+    document.getElementById('heatmap-grid').innerHTML = '';
+    document.getElementById('heatmap-months').innerHTML = '';
+    return;
+  }
+
+  const twdVals = filtered.map(r => toTWD(r.pnl, r.currency));
+  const wins = twdVals.filter(v=>v>0);
+  const losses = twdVals.filter(v=>v<0);
+  const total = twdVals.reduce((s,v)=>s+v,0);
+  const winRate = (wins.length / filtered.length) * 100;
+  const expectancy = total / filtered.length;
+  const grossWin = wins.reduce((s,v)=>s+v,0);
+  const grossLoss = Math.abs(losses.reduce((s,v)=>s+v,0));
+  const profitFactor = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? Infinity : 0);
+
+  // consecutive streaks
+  let curWinStreak=0, curLossStreak=0, maxWinStreak=0, maxLossStreak=0;
+  twdVals.forEach(v => {
+    if (v > 0) { curWinStreak++; curLossStreak=0; if(curWinStreak>maxWinStreak) maxWinStreak=curWinStreak; }
+    else if (v < 0) { curLossStreak++; curWinStreak=0; if(curLossStreak>maxLossStreak) maxLossStreak=curLossStreak; }
+    else { curWinStreak=0; curLossStreak=0; }
+  });
+
+  // max drawdown on cumulative equity curve
+  let cum=0, peak=0, maxDD=0, peakDate=filtered[0].date, ddStart=filtered[0].date, ddEnd=filtered[0].date, curDDStart=filtered[0].date;
+  filtered.forEach(r => {
+    cum += toTWD(r.pnl, r.currency);
+    if (cum > peak) { peak = cum; curDDStart = r.date; }
+    const dd = peak - cum;
+    if (dd > maxDD) { maxDD = dd; ddStart = curDDStart; ddEnd = r.date; }
+  });
+
+  const mk = (label, val, cls, note) => `<div class="stat-box"><div class="stat-label">${label}</div><div class="stat-val ${cls||''}">${val}</div>${note?`<div class="stat-note">${note}</div>`:''}</div>`;
+
+  grid.innerHTML =
+    mk('勝率', winRate.toFixed(1)+'%', winRate>=50?'up':'down', `${wins.length} 勝 / ${losses.length} 敗 / 共 ${filtered.length} 筆`) +
+    mk('期望值（每筆）', fmtTWD(Math.round(expectancy)), cc(expectancy), '平均每筆損益') +
+    mk('獲利因子', profitFactor===Infinity?'∞':profitFactor.toFixed(2), profitFactor>=1?'up':'down', '總獲利 ÷ 總虧損') +
+    mk('最大連勝', maxWinStreak+' 筆', 'up', '') +
+    mk('最大連敗', maxLossStreak+' 筆', 'down', '') +
+    mk('最大回撤', fmtTWD(-Math.round(maxDD)), 'down', maxDD>0?`${ddStart} → ${ddEnd}`:'尚無回撤');
+
+  renderHeatmap(filtered);
+}
+
+function isoWeekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = (d.getDay()+6)%7; // Monday=0
+  d.setDate(d.getDate() - day); // back to Monday of this week
+  return d.toISOString().slice(0,10);
+}
+
+function renderHeatmap(filtered) {
+  const weekMap = {};
+  filtered.forEach(r => {
+    const wk = isoWeekKey(r.date);
+    weekMap[wk] = (weekMap[wk]||0) + toTWD(r.pnl, r.currency);
+  });
+  const weekKeys = Object.keys(weekMap).sort();
+  if (!weekKeys.length) { document.getElementById('heatmap-grid').innerHTML=''; return; }
+
+  // fill in missing weeks between first and last so the grid is continuous
+  const allWeeks = [];
+  let cur = new Date(weekKeys[0]+'T00:00:00');
+  const last = new Date(weekKeys[weekKeys.length-1]+'T00:00:00');
+  while (cur <= last) {
+    allWeeks.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate()+7);
+  }
+
+  const maxAbs = Math.max(...allWeeks.map(k=>Math.abs(weekMap[k]||0)), 1);
+
+  let monthsHtml = '';
+  let lastMonth = '';
+  const cellsHtml = allWeeks.map(wk => {
+    const v = weekMap[wk] || 0;
+    const has = weekMap[wk] !== undefined;
+    let bg = 'var(--bg3)';
+    if (has && v !== 0) {
+      const intensity = Math.min(Math.abs(v) / maxAbs, 1);
+      const alpha = (0.18 + intensity * 0.72).toFixed(2);
+      bg = v > 0 ? `rgba(229,57,53,${alpha})` : `rgba(38,166,154,${alpha})`;
+    }
+    const mth = wk.slice(0,7);
+    if (mth !== lastMonth) {
+      lastMonth = mth;
+      monthsHtml += `<span style="width:16px;display:inline-block;">${parseInt(wk.slice(5,7))}月</span>`;
+    } else {
+      monthsHtml += `<span style="width:16px;display:inline-block;"></span>`;
+    }
+    const title = `週起 ${wk}：${has ? fmtTWD(Math.round(v)) : '無交易'}`;
+    return `<div class="heatmap-cell" style="background:${bg};" title="${title}"></div>`;
+  }).join('');
+
+  document.getElementById('heatmap-months').innerHTML = monthsHtml;
+  document.getElementById('heatmap-grid').innerHTML = cellsHtml;
+}
+
+// ── CHART ──
+function toggleCumul() {
+  showCumul = !showCumul;
+  const btn = document.getElementById('btn-cumul');
+  btn.classList.toggle('on', showCumul);
+  btn.textContent = showCumul ? '累積損益' : '單期損益';
+  renderChart();
+}
+
+function buildChartData() {
+  const gran = document.getElementById('chart-gran').value;
+  const mf = document.getElementById('chart-mkt').value;
+  const filtered = records.filter(r=>mf==='ALL'||r.market===mf);
+  const map = {};
+  filtered.forEach(r => {
+    const k = gran==='daily'?r.date:gran==='monthly'?r.date.slice(0,7):r.date.slice(0,4);
+    map[k] = (map[k]||0) + toTWD(r.pnl,r.currency);
+  });
+  const keys = Object.keys(map).sort();
+  const vals = keys.map(k=>Math.round(map[k]));
+  if (showCumul) { let c=0; return { labels:keys, data:vals.map(v=>{c+=v;return c;}) }; }
+  return { labels:keys, data:vals };
+}
+
+function renderChart() {
+  const canvas = document.getElementById('pnl-chart');
+  const {labels, data} = buildChartData();
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
+  if (!labels.length) { document.getElementById('chart-legend').textContent='尚無資料'; return; }
+  const lastVal = data[data.length-1];
+  const lineColor = lastVal>=0 ? '#E53935' : '#26A69A';
+  const ptColors = data.map(v=>v>=0?'#E53935':'#26A69A');
+  chartInst = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: '損益(TWD)', data,
+      borderColor: lineColor, borderWidth: 2,
+      pointBackgroundColor: ptColors, pointBorderColor: ptColors,
+      pointRadius: labels.length>60?2:4, tension: 0.3,
+      fill: { target:'origin', above:'rgba(229,57,53,0.07)', below:'rgba(38,166,154,0.07)' }
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: { label: ctx => { const v=ctx.raw; return (v>=0?'+':'')+'NT$'+Math.abs(v).toLocaleString('zh-TW'); }}}
+      },
+      scales: {
+        x: { ticks:{color:'#484f58',maxTicksLimit:12}, grid:{color:'rgba(255,255,255,0.05)'} },
+        y: { ticks:{color:'#484f58',callback:v=>(v>=0?'+':'')+'NT$'+Math.round(Math.abs(v)).toLocaleString('zh-TW')}, grid:{color:'rgba(255,255,255,0.05)'} }
+      }
+    }
+  });
+  document.getElementById('chart-legend').innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:${lineColor};display:inline-block;"></span>${showCumul?'累積損益':'單期損益'}（台幣）</span>`;
+}
+
+// ── CALENDAR ──
+function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+function calNext(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+
+function renderCalendar() {
+  const mf = document.getElementById('cal-mkt').value;
+  const mn=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  document.getElementById('cal-title').textContent = `${calYear} 年 ${mn[calMonth]}`;
+  const dayMap={};
+  records.filter(r=>mf==='ALL'||r.market===mf).forEach(r=>{dayMap[r.date]=(dayMap[r.date]||0)+toTWD(r.pnl,r.currency);});
+  const prefix=`${calYear}-${String(calMonth+1).padStart(2,'0')}`;
+  const monthPnl=Object.entries(dayMap).filter(([k])=>k.startsWith(prefix)).reduce((s,[,v])=>s+v,0);
+  const todayStr=today.toISOString().split('T')[0];
+  const todayPnl=dayMap[todayStr];
+  const yearPnl=Object.entries(dayMap).filter(([k])=>k.startsWith(String(calYear))).reduce((s,[,v])=>s+v,0);
+  const hasMonth=Object.keys(dayMap).some(k=>k.startsWith(prefix));
+  const hasYear=Object.keys(dayMap).some(k=>k.startsWith(String(calYear)));
+  const mk=(label,val,has)=>`<div class="metric"><div class="metric-label">${label}</div><div class="metric-value ${has?cc(val):'neutral'}">${has?fmtTWD(Math.round(val)):'—'}</div></div>`;
+  document.getElementById('cal-summary').innerHTML =
+    mk('今日', todayPnl!==undefined?todayPnl:0, todayPnl!==undefined) +
+    mk('本月', monthPnl, hasMonth) +
+    mk(calYear+' 全年', yearPnl, hasYear);
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const offset=(firstDay+6)%7;
+  let html=['一','二','三','四','五','六','日'].map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<offset;i++) html+=`<div class="cal-cell empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const pnl=dayMap[ds];
+    const isTdy=ds===todayStr;
+    const hasCls=pnl!==undefined?(pnl>=0?'has-up':'has-down'):'';
+    html+=`<div class="cal-cell ${isTdy?'today':''} ${hasCls}">
+      <div class="cal-date-num">${d}</div>
+      ${pnl!==undefined?`<div class="cal-pnl-val">${fmtTWD(Math.round(pnl))}</div>`:''}
+    </div>`;
+  }
+  document.getElementById('cal-grid').innerHTML = html;
+}
+
+// ── YEAR ──
+function yearPrev(){viewYear--;renderYearView();}
+function yearNext(){viewYear++;renderYearView();}
+
+function saveGoal() {
+  const val = parseFloat(document.getElementById('goal-input').value);
+  if (isNaN(val) || val<=0) { showToast('請輸入有效的目標金額'); return; }
+  localStorage.setItem('annual_goal_'+viewYear, val);
+  showToast('✓ 已儲存 '+viewYear+' 年目標');
+  renderYearView();
+}
+
+function renderYearView() {
+  const mf = document.getElementById('year-mkt').value;
+  document.getElementById('year-title').textContent = `${viewYear} 年`;
+  const filtered=records.filter(r=>r.date.startsWith(String(viewYear))&&(mf==='ALL'||r.market===mf));
+  const yrTotal=filtered.reduce((s,r)=>s+toTWD(r.pnl,r.currency),0);
+  const ytEl=document.getElementById('year-total');
+  ytEl.textContent=filtered.length?fmtTWD(Math.round(yrTotal)):'—';
+  ytEl.className='year-total-val '+(filtered.length?cc(yrTotal):'neutral');
+  const mn=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  document.getElementById('year-grid').innerHTML = mn.map((name,m)=>{
+    const pfx=`${viewYear}-${String(m+1).padStart(2,'0')}`;
+    const mp=filtered.filter(r=>r.date.startsWith(pfx)).reduce((s,r)=>s+toTWD(r.pnl,r.currency),0);
+    const has=filtered.some(r=>r.date.startsWith(pfx));
+    return `<div class="month-card"><div class="month-name">${name}</div><div class="month-val ${has?cc(mp):'neutral'}">${has?fmtTWD(Math.round(mp)):'—'}</div></div>`;
+  }).join('');
+
+  const goal = parseFloat(localStorage.getItem('annual_goal_'+viewYear));
+  const goalInput = document.getElementById('goal-input');
+  const fill = document.getElementById('goal-fill');
+  const label = document.getElementById('goal-label');
+  if (goal && goal>0) {
+    goalInput.value = goal;
+    const pct = Math.max(0, (yrTotal/goal)*100);
+    fill.style.width = Math.min(pct,100)+'%';
+    fill.className = 'progress-fill' + (yrTotal<0?' down':'');
+    label.textContent = `已達成 ${pct.toFixed(1)}% · ${fmtTWD(Math.round(yrTotal))} / 目標 NT$${goal.toLocaleString('zh-TW')}`;
+  } else {
+    goalInput.value = '';
+    fill.style.width = '0%';
+    label.textContent = '尚未設定 '+viewYear+' 年度目標';
+  }
+}
+
+function refreshAll() {
+  localStorage.setItem('fx_rate', getFx());
+  renderAll();
+}
+function renderAll() { renderSummary(); renderTable(); renderCalendar(); renderYearView(); }
+</script>
+</body>
+</html>
